@@ -261,40 +261,42 @@ async function updateRegistrationById(id, update) {
   return memoryRegistrations[itemIndex];
 }
 
-async function buildEmailHtml(type, registration) {
+async function buildEmailHtml(registration) {
   const lines = [
-    '<h2>KEPHAS Young Builders</h2>',
+    '<h2>KEPHAS Young Builders registration details</h2>',
     `<p><strong>Registration Reference:</strong> ${registration.reference}</p>`,
     `<p><strong>Parent / Guardian:</strong> ${registration.parentFullName}</p>`,
     `<p><strong>Parent Email:</strong> ${registration.parentEmail}</p>`,
+    `<p><strong>Parent Phone:</strong> ${registration.parentPhone}</p>`,
+    `<p><strong>Relationship:</strong> ${registration.relationship}</p>`,
     `<p><strong>Child:</strong> ${registration.childFullName}</p>`,
     `<p><strong>Date of birth:</strong> ${registration.childDob}</p>`,
     `<p><strong>Age:</strong> ${registration.childAge}</p>`,
+    `<p><strong>Gender:</strong> ${registration.childGender || 'Not provided'}</p>`,
+    `<p><strong>School level:</strong> ${registration.schoolLevel || 'Not provided'}</p>`,
     `<p><strong>Technology access:</strong> ${registration.technologyAccess}</p>`,
     `<p><strong>Laptop available:</strong> ${registration.hasDevice === 'yes' ? 'Yes' : 'No'}</p>`,
     `<p><strong>Stable internet confirmed:</strong> ${registration.stableInternetConfirmed ? 'Yes' : 'No'}</p>`,
     `<p><strong>Learning interests:</strong> ${registration.learningInterests.join(', ') || 'Not specified'}</p>`,
     `<p><strong>Class schedule:</strong> ${registration.weekendAvailability.join(', ') || 'Not specified'}</p>`,
     `<p><strong>Expectations:</strong> ${registration.expectations || 'Not provided'}</p>`,
+    `<p><strong>Guardian consent:</strong> ${registration.guardianConsent ? 'Confirmed' : 'Not confirmed'}</p>`,
     `<p><strong>Media consent:</strong> ${registration.mediaConsent ? 'Yes' : 'No'}</p>`,
-    `<p><strong>Status:</strong> ${registration.status}</p>`
+    `<p><strong>Privacy consent:</strong> ${registration.privacyConsent ? 'Confirmed' : 'Not confirmed'}</p>`,
+    `<p><strong>Registration status:</strong> ${registration.status}</p>`,
+    '<h3>Programme information and next steps</h3>',
+    '<p>Classes are held live on Zoom on Saturdays from 9:00 AM to 3:00 PM.</p>',
+    '<p>Each student needs a laptop and stable internet. There are only 50 places.</p>',
+    '<p>A WhatsApp group will be created for programme information; joining details will be shared after registration.</p>',
+    '<p><strong>Programme fee:</strong> ₦35,000</p>',
+    '<p><strong>Bank:</strong> Moniepoint</p>',
+    '<p><strong>Account number:</strong> 8131495622</p>',
+    '<p><strong>Account name:</strong> Adekeye Cephas Precious</p>',
+    `<p>Use your registration reference, ${registration.reference}, as the payment narration.</p>`,
+    `<p>To share your registration reference on WhatsApp, open <a href="https://wa.me/2348131495622?text=${encodeURIComponent(`Hello, I have completed a KEPHAS Young Builders registration. My registration reference is ${registration.reference}.`)}">this prefilled message</a> and tap Send.</p>`,
+    '<p>Questions? Message us on WhatsApp at 08131495622.</p>',
+    '<p>Thank you for registering. Please keep this email and your registration reference for your records.</p>'
   ];
-
-  if (type === 'parent') {
-    lines.push(
-      '<h3>Class schedule and payment</h3>',
-      '<p>Classes are held live on Zoom on Saturdays from 9:00 AM to 3:00 PM.</p>',
-      '<p>Each student needs a laptop and stable internet. There are only 50 places.</p>',
-      '<p>A WhatsApp group will be created for programme information; joining details will be shared after registration.</p>',
-      '<p><strong>Programme fee:</strong> ₦35,000</p>',
-      '<p><strong>Bank:</strong> Moniepoint</p>',
-      '<p><strong>Account number:</strong> 8131495622</p>',
-      '<p><strong>Account name:</strong> Adekeye Cephas Precious</p>',
-      `<p>Use your registration reference, ${registration.reference}, as the payment narration.</p>`,
-      `<p>To share your registration reference on WhatsApp, open <a href="https://wa.me/2348131495622?text=${encodeURIComponent(`Hello, I have completed a KEPHAS Young Builders registration. My registration reference is ${registration.reference}.`)}">this prefilled message</a> and tap Send.</p>`,
-      '<p>Questions? Message us on WhatsApp at 08131495622.</p>'
-    );
-  }
 
   return `<div>${lines.join('')}</div>`;
 }
@@ -346,25 +348,31 @@ async function sendEmail({ to, subject, html, text }) {
 
 async function dispatchEmailNotifications(registration) {
   const adminRecipients = [ADMIN_EMAIL];
-  const adminHtml = await buildEmailHtml('admin', registration);
-  const adminText = [
+  const registrationHtml = await buildEmailHtml(registration);
+  const registrationText = [
     `KEPHAS Young Builders Registration`,
     `Reference: ${registration.reference}`,
     `Parent/Guardian: ${registration.parentFullName}`,
+    `Parent email: ${registration.parentEmail}`,
+    `Parent phone: ${registration.parentPhone}`,
+    `Relationship: ${registration.relationship}`,
     `Child: ${registration.childFullName}`,
-    `Dob: ${registration.childDob}`,
+    `Date of birth: ${registration.childDob}`,
     `Age: ${registration.childAge}`,
+    `Gender: ${registration.childGender || 'Not provided'}`,
+    `School level: ${registration.schoolLevel || 'Not provided'}`,
+    `Technology access: ${registration.technologyAccess}`,
     `Laptop available: ${registration.hasDevice === 'yes' ? 'Yes' : 'No'}`,
     `Stable internet confirmed: ${registration.stableInternetConfirmed ? 'Yes' : 'No'}`,
     `Learning interests: ${registration.learningInterests.join(', ') || 'Not specified'}`,
     `Class schedule: ${registration.weekendAvailability.join(', ') || 'Not specified'}`,
-    `Expectations: ${registration.expectations || 'Not provided'}`
-  ].join('\n');
-
-  const parentHtml = await buildEmailHtml('parent', registration);
-  const parentText = [
-    `Thank you for registering ${registration.childFullName} for KEPHAS Young Builders.`,
-    `Your registration reference is ${registration.reference}.`,
+    `Expectations: ${registration.expectations || 'Not provided'}`,
+    `Guardian consent: ${registration.guardianConsent ? 'Confirmed' : 'Not confirmed'}`,
+    `Media consent: ${registration.mediaConsent ? 'Yes' : 'No'}`,
+    `Privacy consent: ${registration.privacyConsent ? 'Confirmed' : 'Not confirmed'}`,
+    `Registration status: ${registration.status}`,
+    '',
+    'Programme information and next steps:',
     `Class schedule: Saturday, 9:00 AM to 3:00 PM.`,
     `Classes are held live on Zoom. Each student needs a laptop and stable internet.`,
     `There are only 50 places. A WhatsApp group will be created for programme information; joining details will be shared after registration.`,
@@ -375,22 +383,21 @@ async function dispatchEmailNotifications(registration) {
     `Use your registration reference (${registration.reference}) as the payment narration.`,
     `To share your registration reference on WhatsApp, open https://wa.me/2348131495622?text=${encodeURIComponent(`Hello, I have completed a KEPHAS Young Builders registration. My registration reference is ${registration.reference}.`)} and tap Send.`,
     `Questions? WhatsApp 08131495622.`,
-    `We will review your application and contact you soon.`,
-    `You can keep this reference for your records.`
+    `Thank you for registering. Please keep this email and your registration reference for your records.`
   ].join('\n');
 
   const adminResult = await sendEmail({
     to: adminRecipients,
-    subject: `New KEPHAS Young Builders registration - ${registration.reference}`,
-    html: adminHtml,
-    text: adminText
+    subject: `KEPHAS Young Builders registration details - ${registration.reference}`,
+    html: registrationHtml,
+    text: registrationText
   });
 
   const parentResult = await sendEmail({
     to: [registration.parentEmail],
-    subject: `Your KEPHAS Young Builders registration is received - ${registration.reference}`,
-    html: parentHtml,
-    text: parentText
+    subject: `KEPHAS Young Builders registration details - ${registration.reference}`,
+    html: registrationHtml,
+    text: registrationText
   });
 
   const updatedEmailDelivery = {
