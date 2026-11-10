@@ -388,10 +388,10 @@ app.post('/api/registrations', registrationValidators, validateRegistrationReque
   const body = sanitizePayload(req.body);
 
   const age = parseAgeFromDob(body.childDob);
-  if (age === null || age < 10 || age > 17) {
+  if (age === null || age < 10 || age > 19) {
     return res.status(400).json({
-      message: 'Child must be between 10 and 17 years old to register.',
-      errors: { childDob: 'Age must be between 10 and 17.' }
+      message: 'Child must be between 10 and 19 years old to register.',
+      errors: { childDob: 'Age must be between 10 and 19.' }
     });
   }
 
