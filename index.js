@@ -26,6 +26,8 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@kephas.example';
 const JWT_SECRET = process.env.JWT_SECRET || 'kephas-dev-secret';
 const MAX_REGISTRATIONS = 50;
 
+app.set('trust proxy', 1);
+
 const memoryRegistrations = [];
 let databaseReady = false;
 let Registration;
