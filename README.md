@@ -2,7 +2,7 @@
 
 Express API for KEPHAS Young Builders registration, administrator access, MongoDB persistence, and Resend email notifications.
 
-Classes are held on Saturdays from 9:00 AM to 3:00 PM. Registration requests are restricted to Saturday availability.
+Classes are held live on Zoom on Saturdays from 9:00 AM to 3:00 PM. Capacity is limited to 50 registrations. Each student needs a laptop and stable internet. WhatsApp group details are shared after registration; questions can be sent to 08131495622.
 
 ## Run locally
 

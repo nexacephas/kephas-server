@@ -24,10 +24,12 @@ const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'ChangeMe123!';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@kephas.example';
 const JWT_SECRET = process.env.JWT_SECRET || 'kephas-dev-secret';
+const MAX_REGISTRATIONS = 50;
 
 const memoryRegistrations = [];
 let databaseReady = false;
 let Registration;
+let RegistrationCapacity;
 
 const appLimiter = rateLimit({
   windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000),
@@ -104,8 +106,9 @@ const registrationSchema = new mongoose.Schema(
     childAge: { type: Number, required: true },
     childGender: { type: String },
     schoolLevel: { type: String },
-    technologyAccess: { type: String, required: true },
+    technologyAccess: { type: String, enum: ['at-home', 'school'], required: true },
     hasDevice: { type: String, required: true },
+    stableInternetConfirmed: { type: Boolean, required: true, default: false },
     learningInterests: { type: [String], default: [] },
     weekendAvailability: { type: [String], default: [] },
     expectations: { type: String, default: '' },
@@ -134,6 +137,14 @@ const registrationSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+const registrationCapacitySchema = new mongoose.Schema(
+  {
+    _id: { type: String, required: true },
+    count: { type: Number, required: true, min: 0 }
+  },
+  { versionKey: false }
+);
+
 async function connectDatabase() {
   const mongoUri = process.env.MONGODB_URI;
 
@@ -150,6 +161,13 @@ async function connectDatabase() {
       w: 'majority'
     });
     Registration = mongoose.model('Registration', registrationSchema, 'registrations');
+    RegistrationCapacity = mongoose.model('RegistrationCapacity', registrationCapacitySchema, 'registration_capacity');
+    const existingCount = await Registration.countDocuments();
+    await RegistrationCapacity.updateOne(
+      { _id: 'registrations' },
+      { $setOnInsert: { count: existingCount } },
+      { upsert: true }
+    );
     databaseReady = true;
     console.log('Connected to MongoDB Atlas database');
   } catch (error) {
@@ -180,7 +198,33 @@ async function createRegistrationRecord(payload) {
   };
 
   if (databaseReady && Registration) {
-    return Registration.create(registrationData);
+    const capacity = await RegistrationCapacity.findOneAndUpdate(
+      { _id: 'registrations', count: { $lt: MAX_REGISTRATIONS } },
+      { $inc: { count: 1 } },
+      { new: true }
+    );
+
+    if (!capacity) {
+      const error = new Error('All 50 programme places have been filled.');
+      error.code = 'REGISTRATION_CAPACITY_REACHED';
+      throw error;
+    }
+
+    try {
+      return await Registration.create(registrationData);
+    } catch (error) {
+      await RegistrationCapacity.updateOne(
+        { _id: 'registrations', count: { $gt: 0 } },
+        { $inc: { count: -1 } }
+      );
+      throw error;
+    }
+  }
+
+  if (memoryRegistrations.length >= MAX_REGISTRATIONS) {
+    const error = new Error('All 50 programme places have been filled.');
+    error.code = 'REGISTRATION_CAPACITY_REACHED';
+    throw error;
   }
 
   const newRecord = { _id: randomUUID(), ...registrationData, createdAt: new Date(), updatedAt: new Date() };
@@ -225,6 +269,8 @@ async function buildEmailHtml(type, registration) {
     `<p><strong>Date of birth:</strong> ${registration.childDob}</p>`,
     `<p><strong>Age:</strong> ${registration.childAge}</p>`,
     `<p><strong>Technology access:</strong> ${registration.technologyAccess}</p>`,
+    `<p><strong>Laptop available:</strong> ${registration.hasDevice === 'yes' ? 'Yes' : 'No'}</p>`,
+    `<p><strong>Stable internet confirmed:</strong> ${registration.stableInternetConfirmed ? 'Yes' : 'No'}</p>`,
     `<p><strong>Learning interests:</strong> ${registration.learningInterests.join(', ') || 'Not specified'}</p>`,
     `<p><strong>Class schedule:</strong> ${registration.weekendAvailability.join(', ') || 'Not specified'}</p>`,
     `<p><strong>Expectations:</strong> ${registration.expectations || 'Not provided'}</p>`,
@@ -235,13 +281,16 @@ async function buildEmailHtml(type, registration) {
   if (type === 'parent') {
     lines.push(
       '<h3>Class schedule and payment</h3>',
-      '<p>Classes are held on Saturdays from 9:00 AM to 3:00 PM.</p>',
+      '<p>Classes are held live on Zoom on Saturdays from 9:00 AM to 3:00 PM.</p>',
+      '<p>Each student needs a laptop and stable internet. There are only 50 places.</p>',
+      '<p>A WhatsApp group will be created for programme information; joining details will be shared after registration.</p>',
       '<p><strong>Programme fee:</strong> ₦35,000</p>',
       '<p><strong>Bank:</strong> Moniepoint</p>',
       '<p><strong>Account number:</strong> 8131495622</p>',
       '<p><strong>Account name:</strong> Adekeye Cephas Precious</p>',
       `<p>Use your registration reference, ${registration.reference}, as the payment narration.</p>`,
-      `<p>To share your registration reference on WhatsApp, open <a href="https://wa.me/2348131495622?text=${encodeURIComponent(`Hello, I have completed a KEPHAS Young Builders registration. My registration reference is ${registration.reference}.`)}">this prefilled message</a> and tap Send.</p>`
+      `<p>To share your registration reference on WhatsApp, open <a href="https://wa.me/2348131495622?text=${encodeURIComponent(`Hello, I have completed a KEPHAS Young Builders registration. My registration reference is ${registration.reference}.`)}">this prefilled message</a> and tap Send.</p>`,
+      '<p>Questions? Message us on WhatsApp at 08131495622.</p>'
     );
   }
 
@@ -303,6 +352,8 @@ async function dispatchEmailNotifications(registration) {
     `Child: ${registration.childFullName}`,
     `Dob: ${registration.childDob}`,
     `Age: ${registration.childAge}`,
+    `Laptop available: ${registration.hasDevice === 'yes' ? 'Yes' : 'No'}`,
+    `Stable internet confirmed: ${registration.stableInternetConfirmed ? 'Yes' : 'No'}`,
     `Learning interests: ${registration.learningInterests.join(', ') || 'Not specified'}`,
     `Class schedule: ${registration.weekendAvailability.join(', ') || 'Not specified'}`,
     `Expectations: ${registration.expectations || 'Not provided'}`
@@ -313,12 +364,15 @@ async function dispatchEmailNotifications(registration) {
     `Thank you for registering ${registration.childFullName} for KEPHAS Young Builders.`,
     `Your registration reference is ${registration.reference}.`,
     `Class schedule: Saturday, 9:00 AM to 3:00 PM.`,
+    `Classes are held live on Zoom. Each student needs a laptop and stable internet.`,
+    `There are only 50 places. A WhatsApp group will be created for programme information; joining details will be shared after registration.`,
     `Programme fee: ₦35,000.`,
     `Payment bank: Moniepoint.`,
     `Account number: 8131495622.`,
     `Account name: Adekeye Cephas Precious.`,
     `Use your registration reference (${registration.reference}) as the payment narration.`,
     `To share your registration reference on WhatsApp, open https://wa.me/2348131495622?text=${encodeURIComponent(`Hello, I have completed a KEPHAS Young Builders registration. My registration reference is ${registration.reference}.`)} and tap Send.`,
+    `Questions? WhatsApp 08131495622.`,
     `We will review your application and contact you soon.`,
     `You can keep this reference for your records.`
   ].join('\n');
@@ -386,8 +440,12 @@ const registrationValidators = [
   body('childDob').trim().isISO8601().withMessage('Please provide a valid date of birth.'),
   body('childGender').optional({ values: 'falsy' }).trim().isLength({ min: 2, max: 30 }),
   body('schoolLevel').optional({ values: 'falsy' }).trim().isLength({ min: 2, max: 40 }),
-  body('technologyAccess').trim().isIn(['at-home', 'school', 'shared-device']).withMessage('Technology access is required.'),
-  body('hasDevice').trim().isIn(['yes', 'no', 'sometimes']).withMessage('Please select whether your child has a device.'),
+  body('technologyAccess').trim().isIn(['at-home', 'school']).withMessage('Please select where your child will access the classes.'),
+  body('hasDevice').equals('yes').withMessage('Each student needs access to a laptop for class.'),
+  body('stableInternetConfirmed')
+    .isBoolean({ strict: true })
+    .custom((confirmed) => confirmed === true)
+    .withMessage('Stable internet is required for Zoom classes.'),
   body('learningInterests').optional().isArray({ min: 1 }).withMessage('Please choose at least one learning interest.'),
   body('weekendAvailability')
     .isArray({ min: 1, max: 1 })
@@ -432,6 +490,7 @@ app.post('/api/registrations', registrationValidators, validateRegistrationReque
     schoolLevel: body.schoolLevel || '',
     technologyAccess: body.technologyAccess,
     hasDevice: body.hasDevice,
+    stableInternetConfirmed: body.stableInternetConfirmed === true,
     learningInterests: Array.isArray(body.learningInterests) ? body.learningInterests.map((item) => sanitizeText(item)) : [],
     weekendAvailability: ['Saturday'],
     expectations: body.expectations || '',
@@ -482,6 +541,9 @@ app.post('/api/registrations', registrationValidators, validateRegistrationReque
       }
     });
   } catch (error) {
+    if (error.code === 'REGISTRATION_CAPACITY_REACHED') {
+      return res.status(409).json({ message: error.message });
+    }
     console.error('Registration creation failed:', error);
     return res.status(500).json({
       message: 'The registration could not be saved. Please try again.',
