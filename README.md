@@ -2,6 +2,8 @@
 
 Express API for KEPHAS Young Builders registration, administrator access, MongoDB persistence, and Resend email notifications.
 
+Classes are held on Saturdays from 9:00 AM to 3:00 PM. Registration requests are restricted to Saturday availability.
+
 ## Run locally
 
 1. Install dependencies with `npm install`.

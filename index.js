@@ -226,11 +226,24 @@ async function buildEmailHtml(type, registration) {
     `<p><strong>Age:</strong> ${registration.childAge}</p>`,
     `<p><strong>Technology access:</strong> ${registration.technologyAccess}</p>`,
     `<p><strong>Learning interests:</strong> ${registration.learningInterests.join(', ') || 'Not specified'}</p>`,
-    `<p><strong>Weekend availability:</strong> ${registration.weekendAvailability.join(', ') || 'Not specified'}</p>`,
+    `<p><strong>Class schedule:</strong> ${registration.weekendAvailability.join(', ') || 'Not specified'}</p>`,
     `<p><strong>Expectations:</strong> ${registration.expectations || 'Not provided'}</p>`,
     `<p><strong>Media consent:</strong> ${registration.mediaConsent ? 'Yes' : 'No'}</p>`,
     `<p><strong>Status:</strong> ${registration.status}</p>`
   ];
+
+  if (type === 'parent') {
+    lines.push(
+      '<h3>Class schedule and payment</h3>',
+      '<p>Classes are held on Saturdays from 9:00 AM to 3:00 PM.</p>',
+      '<p><strong>Programme fee:</strong> ₦35,000</p>',
+      '<p><strong>Bank:</strong> Moniepoint</p>',
+      '<p><strong>Account number:</strong> 8131495622</p>',
+      '<p><strong>Account name:</strong> Adekeye Cephas Precious</p>',
+      `<p>Use your registration reference, ${registration.reference}, as the payment narration.</p>`,
+      `<p>To share your registration reference on WhatsApp, open <a href="https://wa.me/2348131495622?text=${encodeURIComponent(`Hello, I have completed a KEPHAS Young Builders registration. My registration reference is ${registration.reference}.`)}">this prefilled message</a> and tap Send.</p>`
+    );
+  }
 
   return `<div>${lines.join('')}</div>`;
 }
@@ -291,7 +304,7 @@ async function dispatchEmailNotifications(registration) {
     `Dob: ${registration.childDob}`,
     `Age: ${registration.childAge}`,
     `Learning interests: ${registration.learningInterests.join(', ') || 'Not specified'}`,
-    `Weekend availability: ${registration.weekendAvailability.join(', ') || 'Not specified'}`,
+    `Class schedule: ${registration.weekendAvailability.join(', ') || 'Not specified'}`,
     `Expectations: ${registration.expectations || 'Not provided'}`
   ].join('\n');
 
@@ -299,6 +312,13 @@ async function dispatchEmailNotifications(registration) {
   const parentText = [
     `Thank you for registering ${registration.childFullName} for KEPHAS Young Builders.`,
     `Your registration reference is ${registration.reference}.`,
+    `Class schedule: Saturday, 9:00 AM to 3:00 PM.`,
+    `Programme fee: ₦35,000.`,
+    `Payment bank: Moniepoint.`,
+    `Account number: 8131495622.`,
+    `Account name: Adekeye Cephas Precious.`,
+    `Use your registration reference (${registration.reference}) as the payment narration.`,
+    `To share your registration reference on WhatsApp, open https://wa.me/2348131495622?text=${encodeURIComponent(`Hello, I have completed a KEPHAS Young Builders registration. My registration reference is ${registration.reference}.`)} and tap Send.`,
     `We will review your application and contact you soon.`,
     `You can keep this reference for your records.`
   ].join('\n');
@@ -369,7 +389,12 @@ const registrationValidators = [
   body('technologyAccess').trim().isIn(['at-home', 'school', 'shared-device']).withMessage('Technology access is required.'),
   body('hasDevice').trim().isIn(['yes', 'no', 'sometimes']).withMessage('Please select whether your child has a device.'),
   body('learningInterests').optional().isArray({ min: 1 }).withMessage('Please choose at least one learning interest.'),
-  body('weekendAvailability').optional().isArray({ min: 1 }).withMessage('Please choose weekend availability.'),
+  body('weekendAvailability')
+    .isArray({ min: 1, max: 1 })
+    .withMessage('Classes are held on Saturdays only.')
+    .bail()
+    .custom((days) => days[0] === 'Saturday')
+    .withMessage('Classes are held on Saturdays only.'),
   body('expectations').optional().trim().isLength({ max: 1500 }).withMessage('Expectations must be 1500 characters or less.'),
   body('guardianConsent').isBoolean().withMessage('Guardian consent is required.'),
   body('privacyConsent').isBoolean().withMessage('Privacy consent is required.'),
@@ -408,7 +433,7 @@ app.post('/api/registrations', registrationValidators, validateRegistrationReque
     technologyAccess: body.technologyAccess,
     hasDevice: body.hasDevice,
     learningInterests: Array.isArray(body.learningInterests) ? body.learningInterests.map((item) => sanitizeText(item)) : [],
-    weekendAvailability: Array.isArray(body.weekendAvailability) ? body.weekendAvailability.map((item) => sanitizeText(item)) : [],
+    weekendAvailability: ['Saturday'],
     expectations: body.expectations || '',
     guardianConsent: body.guardianConsent === true,
     mediaConsent: body.mediaConsent === true,
